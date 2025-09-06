@@ -14,8 +14,8 @@ func NewSlotInMemmory() *SlotInMemmory {
 		slots: make(map[int]*domain.Slot)}
 }
 
-func (s *SlotInMemmory) SaveSlot(slot *domain.Slot) error {
-	s.slots[slot.SlotId] = slot
+func (s *SlotInMemmory) SaveSlot(slot domain.Slot) error {
+	s.slots[slot.SlotId] = &slot
 	return nil
 }
 func (s *SlotInMemmory) UpdateSlot(slot *domain.Slot) error {

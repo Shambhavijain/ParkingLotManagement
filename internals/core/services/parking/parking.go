@@ -60,7 +60,7 @@ func (s *ParkingService) UnparkVehicle(VehicleNumber string) (float64, error) {
 	ExitTime := time.Now()
 	ticket, err := s.TicketRepo.FindTicketByVehicleNumber(VehicleNumber)
 	if err != nil {
-		return 0, fmt.Errorf("ticket of this vehiclenumber not found in DB ")
+		return 0, fmt.Errorf("ticket of this vehiclenumber not found")
 	}
 
 	fee, err := s.CalculateFee(ticket.SlotId, ticket.EntryTime, ExitTime)
@@ -78,7 +78,7 @@ func (s *ParkingService) UnparkVehicle(VehicleNumber string) (float64, error) {
 	}
 
 	if err = s.TicketRepo.DeleteTicket(ticket.TicketId); err != nil {
-		return 0, fmt.Errorf("ticket can't be delete from DB %w", err)
+		return 0, fmt.Errorf("ticket can't be delete  %w", err)
 	}
 
 	return fee, nil

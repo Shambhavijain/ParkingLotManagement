@@ -21,6 +21,10 @@ func Start() {
 	SlotRepo := mysql.NewSlotRepo(database)
 	TicketRepo := mysql.NewTicketRepo(database)
 
+	//InMemmory
+	// SlotRepo := inmemmory.NewSlotInMemmory()
+	// TicketRepo := inmemmory.NewTicketInMemmory()
+
 	ParkingService := parking.NewParkingService(SlotRepo, TicketRepo)
 	handler := requestHandlers.NewHandlers(ParkingService)
 
