@@ -1,6 +1,7 @@
 package parking
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"parkingSlotManagement/internals/core/domain"
@@ -20,6 +21,16 @@ func NewParkingService(s ports.SlotRepository, t ports.TicketRepository) *Parkin
 }
 
 func (s *ParkingService) ParkVehicle(vehicle domain.Vehicle) (*domain.Ticket, error) {
+
+	existingTicket, err := s.TicketRepo.FindTicketByVehicleNumber(vehicle.VehicleNumber)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, fmt.Errorf("error checking existing ticket: %w", err)
+	}
+	if existingTicket != nil {
+
+		return nil, fmt.Errorf("vehicle with number %s is already parked", vehicle.VehicleNumber)
+	}
+
 	slots, err := s.SlotRepo.FindSlotByType(vehicle.VehicleType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch slots from DB %w", err)
@@ -54,6 +65,7 @@ func (s *ParkingService) ParkVehicle(vehicle domain.Vehicle) (*domain.Ticket, er
 
 func GenerateTicketID() int64 {
 	return time.Now().UnixNano()
+
 }
 
 func (s *ParkingService) UnparkVehicle(VehicleNumber string) (float64, error) {
