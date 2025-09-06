@@ -72,3 +72,19 @@ func (h *Handlers) AddSlot(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Slot added successfully"))
 
 }
+
+func (h *Handlers) GetAvailableSlots(w http.ResponseWriter, r *http.Request) {
+	slots, err := h.service.GetAvailableSlots()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(slots); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+	}
+
+}

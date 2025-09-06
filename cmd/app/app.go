@@ -33,6 +33,8 @@ func Start() {
 	r.HandleFunc("/ParkVehicle", handler.ParkVehicleRequest).Methods(http.MethodPost)
 	r.HandleFunc("/UnparkVehicle", handler.UnparkVehicleRequest).Methods(http.MethodPost)
 	r.HandleFunc("/AddSlot", handler.AddSlot).Methods(http.MethodPost)
+	r.HandleFunc("/GetAvailableSlots", handler.GetAvailableSlots).Methods(http.MethodPost)
+
 	log.Println("Server running on:8080")
 	http.ListenAndServe(":8080", r)
 }

@@ -86,9 +86,15 @@ func (s *ParkingService) UnparkVehicle(VehicleNumber string) (float64, error) {
 }
 func (s *ParkingService) AddSlot(slot domain.Slot) error {
 	err := s.SlotRepo.SaveSlot(slot)
-
 	return err
 
+}
+func (s *ParkingService) GetAvailableSlots() ([]domain.Slot, error) {
+	slots, err := s.SlotRepo.ListAvailableSlots()
+	if err != nil {
+		return nil, fmt.Errorf("unable to get available slots  %w", err)
+	}
+	return slots, nil
 }
 
 func (s *ParkingService) CalculateFee(SlotId int, EntryTime time.Time, ExistTime time.Time) (float64, error) {
