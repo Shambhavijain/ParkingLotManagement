@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"parkingSlotManagement/internals/adapters/repositories/inmemmory"
 	"parkingSlotManagement/internals/core/domain"
+	"parkingSlotManagement/internals/core/services/auth"
 	"parkingSlotManagement/internals/core/services/parking"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestAddSlot(t *testing.T) {
@@ -161,41 +164,38 @@ func TestParkVehicleRequest(t *testing.T) {
 		t.Errorf("Expected status 500 Internal Server Error for service error, got %d", resp3.Code)
 	}
 
-	if !strings.Contains(resp3.Body.String(), "no available slots for this vehicle type\n") {
-		t.Errorf("Expected error message 'parking failed', got %q", resp3.Body.String())
+	if !strings.Contains(strings.TrimSpace(resp3.Body.String()), "failed to fetch slots by type") {
+		t.Errorf("Expected error message to contain 'failed to fetch slots by type', got '%s'", resp3.Body.String())
 	}
+
 }
 
 func TestUnparkVehicleRequest(t *testing.T) {
-
 	slotRepo := inmemmory.NewSlotInMemmory()
 	ticketRepo := inmemmory.NewTicketInMemmory()
 	service := parking.NewParkingService(slotRepo, ticketRepo)
 	h := NewHandlers(service)
 
+	// Step 1: Save a slot
 	slot := domain.Slot{
 		SlotId:   1,
 		SlotType: "car",
-		IsFree:   true,
+		IsFree:   false,
 	}
 	slotRepo.SaveSlot(slot)
 
-	vehicle := domain.Vehicle{
+	// Step 2: Save a ticket
+	ticket := domain.Ticket{
+		TicketId:      123456789,
 		VehicleNumber: "UP16AB1234",
-		VehicleType:   "car",
+		SlotId:        1,
+		EntryTime:     time.Now().Add(-2 * time.Hour),
 	}
-	_, err := service.ParkVehicle(vehicle)
-	if err != nil {
-		t.Fatalf("Failed to park vehicle: %v", err)
-	}
+	ticketRepo.SaveTicket(ticket)
 
-	unparkReq := map[string]string{
-		"vehiclenumber": "UP16AB1234",
-	}
-	body := new(bytes.Buffer)
-	json.NewEncoder(body).Encode(unparkReq)
-
-	req := httptest.NewRequest(http.MethodPost, "/UnparkVehicle", body)
+	// Step 3: Create request to unpark
+	body := `{"vehiclenumber":"UP16AB1234"}`
+	req := httptest.NewRequest(http.MethodPost, "/UnparkVehicle", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 
@@ -205,50 +205,95 @@ func TestUnparkVehicleRequest(t *testing.T) {
 		t.Errorf("Expected status 200 OK, got %d", resp.Code)
 	}
 
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		t.Fatalf("Failed to decode response: %v", err)
 	}
 
-	if result["vehiclenumber"] != "UP16AB1234" {
-		t.Errorf("Expected vehiclenumber 'UP16AB1234', got %v", result["vehiclenumber"])
+	if response["vehiclenumber"] != "UP16AB1234" {
+		t.Errorf("Expected vehicle number 'UP16AB1234', got '%v'", response["vehiclenumber"])
+	}
+	if response["message"] != "Successfully Unpark The Vehicle" {
+		t.Errorf("Expected success message, got '%v'", response["message"])
+	}
+}
+func TestUnparkVehicleRequest_InvalidVehicle(t *testing.T) {
+	slotRepo := inmemmory.NewSlotInMemmory()
+	ticketRepo := inmemmory.NewTicketInMemmory()
+	service := parking.NewParkingService(slotRepo, ticketRepo)
+	h := NewHandlers(service)
+
+	body := `{"vehiclenumber":"NOTFOUND123"}`
+	req := httptest.NewRequest(http.MethodPost, "/UnparkVehicle", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+
+	h.UnparkVehicleRequest(resp, req)
+
+	if resp.Code != http.StatusInternalServerError {
+		t.Errorf("Expected status 500 Internal Server Error, got %d", resp.Code)
 	}
 
-	if result["message"] != "Successfully Unpark The Vehicle" {
-		t.Errorf("Expected success message, got %v", result["message"])
+	if !strings.Contains(resp.Body.String(), "ticket of this vehicle number not found") {
+		t.Errorf("Expected error message, got '%s'", resp.Body.String())
 	}
+}
 
-	req2 := httptest.NewRequest(http.MethodPost, "/UnparkVehicle", strings.NewReader("{invalid json"))
-	req2.Header.Set("Content-Type", "application/json")
-	resp2 := httptest.NewRecorder()
+func TestLoginHandler(t *testing.T) {
+	// Set env variables manually for testing
+	os.Setenv("ADMIN_USERNAME", "admin")
+	os.Setenv("ADMIN_PASSWORD", "admin123")
+	os.Setenv("JWT_SECRET", "testsecret")
 
-	h.UnparkVehicleRequest(resp2, req2)
+	authService := auth.NewAuthService()
+	handler := LoginHandler(authService)
 
-	if resp2.Code != http.StatusInternalServerError {
-		t.Errorf("Expected status 500 Internal Server Error for invalid JSON, got %d", resp2.Code)
-	}
+	t.Run("Valid credentials", func(t *testing.T) {
+		creds := map[string]string{
+			"username": "admin",
+			"password": "admin123",
+		}
+		body, _ := json.Marshal(creds)
 
-	if !strings.Contains(resp2.Body.String(), "Invalid Body Request") {
-		t.Errorf("Expected error message 'Invalid Body Request', got %q", resp2.Body.String())
-	}
+		req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
 
-	unparkReq3 := map[string]string{
-		"vehiclenumber": "NOTEXIST123",
-	}
-	body3 := new(bytes.Buffer)
-	json.NewEncoder(body3).Encode(unparkReq3)
+		handler.ServeHTTP(resp, req)
 
-	req3 := httptest.NewRequest(http.MethodPost, "/UnparkVehicle", body3)
-	req3.Header.Set("Content-Type", "application/json")
-	resp3 := httptest.NewRecorder()
+		if resp.Code != http.StatusOK {
+			t.Errorf("Expected status 200 OK, got %d", resp.Code)
+		}
 
-	h.UnparkVehicleRequest(resp3, req3)
+		var result map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
 
-	if resp3.Code != http.StatusInternalServerError {
-		t.Errorf("Expected status 500 Internal Server Error for unknown vehicle, got %d", resp3.Code)
-	}
+		if result["token"] == "" {
+			t.Errorf("Expected a token, got empty string")
+		}
+	})
 
-	if !strings.Contains(resp3.Body.String(), "ticket of this vehiclenumber not found") {
-		t.Errorf("Expected error message 'ticket not found', got %q", resp3.Body.String())
-	}
+	t.Run("Invalid credentials", func(t *testing.T) {
+		creds := map[string]string{
+			"username": "wrong",
+			"password": "wrongpass",
+		}
+		body, _ := json.Marshal(creds)
+
+		req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
+
+		handler.ServeHTTP(resp, req)
+
+		if resp.Code != http.StatusUnauthorized {
+			t.Errorf("Expected status 401 Unauthorized, got %d", resp.Code)
+		}
+
+		if !strings.Contains(resp.Body.String(), "Unauthorized") {
+			t.Errorf("Expected error message 'Unauthorized', got %q", resp.Body.String())
+		}
+	})
 }

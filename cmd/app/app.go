@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"parkingSlotManagement/internals/adapters/repositories/mysql"
 	"parkingSlotManagement/internals/adapters/requestHandlers"
+	"parkingSlotManagement/internals/adapters/requestHandlers/middleware"
+	"parkingSlotManagement/internals/core/services/auth"
 	"parkingSlotManagement/internals/core/services/parking"
 
 	"github.com/gorilla/mux"
@@ -26,14 +28,20 @@ func Start() {
 	// TicketRepo := inmemmory.NewTicketInMemmory()
 
 	ParkingService := parking.NewParkingService(SlotRepo, TicketRepo)
+	AuthService := auth.NewAuthService()
 	handler := requestHandlers.NewHandlers(ParkingService)
+
+	loginHandler := requestHandlers.LoginHandler(AuthService)
 
 	r := mux.NewRouter()
 
-	r.HandleFunc("/ParkVehicle", handler.ParkVehicleRequest).Methods(http.MethodPost)
-	r.HandleFunc("/UnparkVehicle", handler.UnparkVehicleRequest).Methods(http.MethodPost)
-	r.HandleFunc("/AddSlot", handler.AddSlot).Methods(http.MethodPost)
-	r.HandleFunc("/GetAvailableSlots", handler.GetAvailableSlots).Methods(http.MethodPost)
+	r.HandleFunc("/login", loginHandler).Methods(http.MethodPost)
+
+
+	r.HandleFunc("/ParkVehicle", middleware.AuthMiddleware(handler.ParkVehicleRequest, AuthService)).Methods(http.MethodPost)
+	r.HandleFunc("/UnparkVehicle", middleware.AuthMiddleware(handler.UnparkVehicleRequest, AuthService)).Methods(http.MethodPost)
+	r.HandleFunc("/AddSlot", middleware.AuthMiddleware(handler.AddSlot, AuthService)).Methods(http.MethodPost)
+	r.HandleFunc("/GetAvailableSlots", middleware.AuthMiddleware(handler.GetAvailableSlots, AuthService)).Methods(http.MethodPost)
 
 	log.Println("Server running on:8080")
 	http.ListenAndServe(":8080", r)

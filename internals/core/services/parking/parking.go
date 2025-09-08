@@ -2,8 +2,6 @@ package parking
 
 import (
 	"database/sql"
-	"errors"
-	"fmt"
 	"parkingSlotManagement/internals/core/domain"
 	"parkingSlotManagement/internals/ports"
 	"time"
@@ -24,16 +22,16 @@ func (s *ParkingService) ParkVehicle(vehicle domain.Vehicle) (*domain.Ticket, er
 
 	existingTicket, err := s.TicketRepo.FindTicketByVehicleNumber(vehicle.VehicleNumber)
 	if err != nil && err != sql.ErrNoRows {
-		return nil, fmt.Errorf("error checking existing ticket: %w", err)
+		return nil, ErrExistingTicketCheck
 	}
 	if existingTicket != nil {
 
-		return nil, fmt.Errorf("vehicle with number %s is already parked", vehicle.VehicleNumber)
+		return nil, ErrVehicleAlreadyParked
 	}
 
 	slots, err := s.SlotRepo.FindSlotByType(vehicle.VehicleType)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch slots from DB %w", err)
+		return nil, ErrSlotListFailed
 	}
 	var firstAvailable *domain.Slot
 	for i := range slots {
@@ -44,11 +42,11 @@ func (s *ParkingService) ParkVehicle(vehicle domain.Vehicle) (*domain.Ticket, er
 		}
 	}
 	if firstAvailable == nil {
-		return nil, errors.New("no available slots for this vehicle type")
+		return nil, ErrSlotFetchByType
 	}
 	firstAvailable.IsFree = false
 	if err := s.SlotRepo.UpdateSlot(firstAvailable); err != nil {
-		return nil, fmt.Errorf("failed to update slot:%w", err)
+		return nil, ErrSlotUpdateFailed
 	}
 	ticket := &domain.Ticket{
 		TicketId:      GenerateTicketID(),
@@ -57,7 +55,7 @@ func (s *ParkingService) ParkVehicle(vehicle domain.Vehicle) (*domain.Ticket, er
 		EntryTime:     time.Now(),
 	}
 	if err := s.TicketRepo.SaveTicket(*ticket); err != nil {
-		return nil, fmt.Errorf("failed to save ticket to database %w", err)
+		return nil, ErrTicketSaveFailed
 	}
 	return ticket, nil
 
@@ -71,25 +69,27 @@ func GenerateTicketID() int64 {
 func (s *ParkingService) UnparkVehicle(VehicleNumber string) (float64, error) {
 	ExitTime := time.Now()
 	ticket, err := s.TicketRepo.FindTicketByVehicleNumber(VehicleNumber)
-	if err != nil {
-		return 0, fmt.Errorf("ticket of this vehiclenumber not found")
+	if err != nil || ticket == nil {
+		return 0, ErrTicketNotFound
 	}
 	slot, err := s.SlotRepo.FindSlotByID(ticket.SlotId)
-	if err != nil {
-		return 0, fmt.Errorf("failed to fetch slot: %w", err)
+
+	if err != nil || slot == nil {
+		return 0, ErrSlotNotFound
 	}
+
 	fee, err := s.CalculateFee(ticket.SlotId, ticket.EntryTime, ExitTime)
 	if err != nil {
-		return 0, fmt.Errorf("unable to calculate fee %w", err)
+		return 0, ErrFeeCalculationFailed
 	}
 
 	slot.IsFree = true
 	if err := s.SlotRepo.UpdateSlot(slot); err != nil {
-		return 0, fmt.Errorf("failed to update slot status: %w", err)
+		return 0, ErrSlotUpdateFailed
 	}
 
 	if err = s.TicketRepo.DeleteTicket(ticket.TicketId); err != nil {
-		return 0, fmt.Errorf("ticket can't be delete  %w", err)
+		return 0, ErrTicketDeleteFailed
 	}
 
 	return fee, nil
@@ -103,13 +103,16 @@ func (s *ParkingService) AddSlot(slot domain.Slot) error {
 func (s *ParkingService) GetAvailableSlots() ([]domain.Slot, error) {
 	slots, err := s.SlotRepo.ListAvailableSlots()
 	if err != nil {
-		return nil, fmt.Errorf("unable to get available slots  %w", err)
+		return nil, ErrSlotListFailed
 	}
 	return slots, nil
 }
 
 func (s *ParkingService) CalculateFee(SlotId int, EntryTime time.Time, ExistTime time.Time) (float64, error) {
-	slottype, _ := s.SlotRepo.FindSlotTypebyID(SlotId)
+	slottype, err := s.SlotRepo.FindSlotTypebyID(SlotId)
+	if err != nil {
+		return 0, err
+	}
 	duration := ExistTime.Sub(EntryTime)
 
 	switch slottype {
@@ -120,6 +123,6 @@ func (s *ParkingService) CalculateFee(SlotId int, EntryTime time.Time, ExistTime
 		fee := duration.Hours() * 30
 		return fee, nil
 	default:
-		return 0, fmt.Errorf("invalid vehicle type")
+		return 0, ErrInvalidVehicleType
 	}
 }

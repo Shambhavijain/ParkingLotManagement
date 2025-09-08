@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"database/sql"
 	"errors"
 	"parkingSlotManagement/internals/core/domain"
 	"testing"
@@ -75,9 +76,10 @@ func TestUpdateSlot(t *testing.T) {
 			name: "successfully update slot",
 			slot: domain.Slot{SlotId: 1, SlotType: "car", IsFree: false},
 			mockFunc: func() {
-				mock.ExpectExec("UPDATE slots SET slottype=?, isfree=? WHERE slotid=?").
+				mock.ExpectExec(`(?i)UPDATE\s+slots\s+SET\s+slottype=\?,\s*isfree=\?\s+WHERE\s+slotid=\?`).
 					WithArgs("car", false, 1).
 					WillReturnResult(sqlmock.NewResult(0, 1))
+
 			},
 			expectedError: false,
 		},
@@ -85,9 +87,10 @@ func TestUpdateSlot(t *testing.T) {
 			name: "fail to update slot in DB",
 			slot: domain.Slot{SlotId: 1, SlotType: "car", IsFree: false},
 			mockFunc: func() {
-				mock.ExpectExec("UPDATE slots SET slottype=?, isfree=? WHERE slotid=?").
+				mock.ExpectExec(`(?i)UPDATE\s+slots\s+SET\s+slottype=\?,\s*isfree=\?\s+WHERE\s+slotid=\?`).
 					WithArgs("car", false, 1).
 					WillReturnError(errors.New("error updating slot"))
+
 			},
 			expectedError: true,
 		},
@@ -171,7 +174,7 @@ func TestFindSlotByType(t *testing.T) {
 			name:     "successfully get slots by type",
 			slotType: "car",
 			mockFunc: func(slotType string) {
-				mock.ExpectQuery("SELECT slotid,slottype,isfree FROM slots where slottype=? AND isfree=true").
+				mock.ExpectQuery(`(?i)SELECT\s+slotid,\s*slottype,\s*isfree\s+FROM\s+slots\s+WHERE\s+slottype=\?\s+AND\s+isfree=true`).
 					WithArgs(slotType).
 					WillReturnRows(sqlmock.NewRows([]string{"slotid", "slottype", "isfree"}).
 						AddRow(1, "car", true).
@@ -187,7 +190,7 @@ func TestFindSlotByType(t *testing.T) {
 			name:     "failed get slots by type",
 			slotType: "car",
 			mockFunc: func(slotType string) {
-				mock.ExpectQuery("SELECT slotid,slottype,isfree FROM slots where slottype=? AND isfree=true").
+				mock.ExpectQuery(`(?i)SELECT\s+slotid,\s*slottype,\s*isfree\s+FROM\s+slots\s+WHERE\s+slottype=\?\s+AND\s+isfree=true`).
 					WithArgs(slotType).
 					WillReturnError(errors.New("error fetching slot by type"))
 			},
@@ -195,16 +198,146 @@ func TestFindSlotByType(t *testing.T) {
 			expectedError: true,
 		},
 	}
+	// abcd
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockFunc(tt.slotType)
+
+			_, err := SlotRepo.FindSlotByType(tt.slotType)
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Nil(t, mock.ExpectationsWereMet())
 		})
-		_, err := SlotRepo.FindSlotByType(tt.slotType)
-		if tt.expectedError {
-			assert.Error(t, err)
-		} else {
-			assert.NoError(t, err)
-		}
-		assert.Nil(t, mock.ExpectationsWereMet())
+	}
+}
+func TestFindSlotTypeByID(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	repo := NewSlotRepo(db)
+
+	tests := []struct {
+		name          string
+		slotID        int
+		mockFunc      func()
+		expectedType  string
+		expectedError bool
+	}{
+		{
+			name:   "successfully fetch slot type",
+			slotID: 1,
+			mockFunc: func() {
+				mock.ExpectQuery(`(?i)SELECT\s+slottype\s+from\s+slots\s+WHERE\s+slotid=\?`).
+					WithArgs(1).
+					WillReturnRows(sqlmock.NewRows([]string{"slottype"}).AddRow("car"))
+			},
+			expectedType:  "car",
+			expectedError: false,
+		},
+		{
+			name:   "slot not found",
+			slotID: 2,
+			mockFunc: func() {
+				mock.ExpectQuery(`(?i)SELECT\s+slottype\s+from\s+slots\s+WHERE\s+slotid=\?`).
+					WithArgs(2).
+					WillReturnError(sql.ErrNoRows)
+			},
+			expectedType:  "",
+			expectedError: true,
+		},
+		{
+			name:   "db error",
+			slotID: 3,
+			mockFunc: func() {
+				mock.ExpectQuery(`(?i)SELECT\s+slottype\s+from\s+slots\s+WHERE\s+slotid=\?`).
+					WithArgs(3).
+					WillReturnError(errors.New("db error"))
+			},
+			expectedType:  "",
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockFunc()
+			slotType, err := repo.FindSlotTypebyID(tt.slotID)
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedType, slotType)
+			}
+			assert.Nil(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestFindSlotByID(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+
+	repo := NewSlotRepo(db)
+
+	tests := []struct {
+		name          string
+		slotID        int
+		mockFunc      func()
+		expectedSlot  *domain.Slot
+		expectedError bool
+	}{
+		{
+			name:   "successfully fetch slot by ID",
+			slotID: 1,
+			mockFunc: func() {
+				mock.ExpectQuery(`(?i)SELECT\s+slotid,\s*slottype,\s*isfree\s+FROM\s+slots\s+WHERE\s+slotid\s*=\s*\?`).
+					WithArgs(1).
+					WillReturnRows(sqlmock.NewRows([]string{"slotid", "slottype", "isfree"}).
+						AddRow(1, "car", true))
+			},
+			expectedSlot:  &domain.Slot{SlotId: 1, SlotType: "car", IsFree: true},
+			expectedError: false,
+		},
+		{
+			name:   "slot not found",
+			slotID: 2,
+			mockFunc: func() {
+				mock.ExpectQuery(`(?i)SELECT\s+slotid,\s*slottype,\s*isfree\s+FROM\s+slots\s+WHERE\s+slotid\s*=\s*\?`).
+					WithArgs(2).
+					WillReturnError(sql.ErrNoRows)
+			},
+			expectedSlot:  nil,
+			expectedError: true,
+		},
+		{
+			name:   "db error",
+			slotID: 3,
+			mockFunc: func() {
+				mock.ExpectQuery(`(?i)SELECT\s+slotid,\s*slottype,\s*isfree\s+FROM\s+slots\s+WHERE\s+slotid\s*=\s*\?`).
+					WithArgs(3).
+					WillReturnError(errors.New("db error"))
+			},
+			expectedSlot:  nil,
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockFunc()
+			slot, err := repo.FindSlotByID(tt.slotID)
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedSlot, slot)
+			}
+			assert.Nil(t, mock.ExpectationsWereMet())
+		})
 	}
 }

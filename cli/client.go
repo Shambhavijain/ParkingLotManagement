@@ -3,29 +3,67 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
-	"parkingSlotManagement/internals/adapters/repositories/inmemmory"
+	"parkingSlotManagement/internals/adapters/repositories/mysql"
 	"parkingSlotManagement/internals/core/domain"
+	"parkingSlotManagement/internals/core/services/auth"
 	"parkingSlotManagement/internals/core/services/parking"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	err := godotenv.Load("../.env")
+	if err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
 
-	slotRepo := inmemmory.NewSlotInMemmory()
-	ticketRepo := inmemmory.NewTicketInMemmory()
+	// slotRepo := inmemmory.NewSlotInMemmory()
+	// ticketRepo := inmemmory.NewTicketInMemmory()
+
+	database := mysql.GetInstance()
+	slotRepo := mysql.NewSlotRepo(database)
+	ticketRepo := mysql.NewTicketRepo(database)
 
 	service := parking.NewParkingService(slotRepo, ticketRepo)
 
-	// Pre-populate slots
-	slotRepo.SaveSlot(domain.Slot{SlotId: 1, SlotType: "car", IsFree: true})
-	slotRepo.SaveSlot(domain.Slot{SlotId: 2, SlotType: "car", IsFree: true})
-	slotRepo.SaveSlot(domain.Slot{SlotId: 3, SlotType: "bike", IsFree: true})
-	slotRepo.SaveSlot(domain.Slot{SlotId: 4, SlotType: "bike", IsFree: true})
+	authService := auth.NewAuthService()
+
+	// slotRepo.SaveSlot(domain.Slot{SlotId: 1, SlotType: "car", IsFree: true})
+	// slotRepo.SaveSlot(domain.Slot{SlotId: 2, SlotType: "car", IsFree: true})
+	// slotRepo.SaveSlot(domain.Slot{SlotId: 3, SlotType: "bike", IsFree: true})
+	// slotRepo.SaveSlot(domain.Slot{SlotId: 4, SlotType: "bike", IsFree: true})
 
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("Welcome to Parking Lot Management System 🅿️")
+	fmt.Println("Welcome to Parking Lot Management System ")
+	time.Sleep(500 * time.Millisecond)
+
+	// adminUsername := os.Getenv("ADMIN_USERNAME")
+	// adminPassword := os.Getenv("ADMIN_PASSWORD")
+
+	for {
+		fmt.Print("Enter username: ")
+		username, _ := reader.ReadString('\n')
+		username = strings.TrimSpace(username)
+
+		fmt.Print("Enter password: ")
+		password, _ := reader.ReadString('\n')
+		password = strings.TrimSpace(password)
+
+		token, err := authService.Login(username, password)
+		if err != nil {
+			fmt.Println("Invalid credentials. Please try again.")
+			continue
+		}
+
+		fmt.Println("Login successful!")
+		fmt.Printf("Your token: %s\n", token)
+		break
+	}
 
 	for {
 		fmt.Println("\n--- Menu ---")
@@ -44,7 +82,7 @@ func main() {
 			fmt.Print("Enter vehicle number: ")
 			number, _ := reader.ReadString('\n')
 			number = strings.TrimSpace(number)
-
+			time.Sleep(500 * time.Millisecond)
 			fmt.Print("Enter vehicle type (car/bike): ")
 			vtype, _ := reader.ReadString('\n')
 			vtype = strings.TrimSpace(strings.ToLower(vtype))
@@ -61,7 +99,13 @@ func main() {
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)
 			} else {
-				fmt.Printf("Vehicle parked successfully. Ticket ID: %d\n", ticket.TicketId)
+				time.Sleep(500 * time.Millisecond)
+				fmt.Println("Vehicle parked successfully. Ticket details:")
+				fmt.Printf("Ticket ID: %d\n", ticket.TicketId)
+				fmt.Printf("Vehicle Number: %s\n", ticket.VehicleNumber)
+				fmt.Printf("Entry Time: %s\n", ticket.EntryTime.Format("2006-01-02 15:04:05"))
+				fmt.Printf("Slot ID: %d\n", ticket.SlotId)
+
 			}
 
 		case "2":
@@ -73,6 +117,7 @@ func main() {
 			if err != nil {
 				fmt.Printf(" Error: %v\n", err)
 			} else {
+				time.Sleep(500 * time.Millisecond)
 				fmt.Printf(" Vehicle unparked. Fee: ₹%.2f\n", fee)
 			}
 
@@ -81,9 +126,10 @@ func main() {
 			if err != nil {
 				fmt.Printf("Error fetching slots: %v\n", err)
 			} else {
+				time.Sleep(500 * time.Millisecond)
 				fmt.Println(" Available Slots:")
 				for _, slot := range slots {
-					fmt.Printf("Slot ID: %d | Type: %s\n", slot.SlotId, slot.SlotType)
+					fmt.Printf("Slot ID: %d | Type: %s   |IsFree: %v\n", slot.SlotId, slot.SlotType, slot.IsFree)
 				}
 			}
 

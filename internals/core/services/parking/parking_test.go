@@ -157,7 +157,7 @@ func TestOpposingCases(t *testing.T) {
 			ticket:      nil,
 			slot:        nil,
 			expectError: true,
-			errorText:   "ticket of this vehiclenumber not found",
+			errorText:   "ticket of this vehicle number not found",
 		},
 		{
 			name: "slot not found",

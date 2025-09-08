@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/http"
 	"parkingSlotManagement/internals/core/domain"
+	"parkingSlotManagement/internals/core/services/auth"
 	"parkingSlotManagement/internals/core/services/parking"
 )
 
@@ -87,4 +88,22 @@ func (h *Handlers) GetAvailableSlots(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 	}
 
+}
+
+func LoginHandler(authService auth.AuthService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var creds struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		json.NewDecoder(r.Body).Decode(&creds)
+
+		token, err := authService.Login(creds.Username, creds.Password)
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		json.NewEncoder(w).Encode(map[string]string{"token": token})
+	}
 }
