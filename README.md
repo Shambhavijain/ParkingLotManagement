@@ -9,13 +9,19 @@ This project is a Parking Lot Management System built using **Go**, following **
 
 ```
 parkingSlotManagement/
-├── cli/                    # CLI entry point (client.go)
+├── cli/   # CLI entry point (client.go)
+|__ cmd/
+|   |__app/
+|
+|__ main.go
+|                 
 ├── internals/
 │   ├── adapters/
 │   │   └── repositories/   # MySQL & InMemory Repos
 │   └── core/
-│       ├── domain/         # Domain models
-│       └── services/       # Business logic
+│   |    ├── domain/         # Domain models
+│   |    └── services/# Business logic
+|   |__ports/   
 ├── .env                    # Environment variables
 └── README.md
 ```
