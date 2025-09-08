@@ -7,6 +7,6 @@ type SlotRepository interface {
 	UpdateSlot(slot *domain.Slot) error
 	ListAvailableSlots() ([]domain.Slot, error)
 	FindSlotByType(slottype string) ([]domain.Slot, error)
-	FindSlotTypebyID(SlotId int) string
+	FindSlotTypebyID(SlotId int) (string, error)
 	FindSlotByID(SlotId int) (*domain.Slot, error)
 }

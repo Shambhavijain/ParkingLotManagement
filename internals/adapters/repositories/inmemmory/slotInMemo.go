@@ -46,13 +46,13 @@ func (s *SlotInMemmory) FindSlotByType(SlotType string) ([]domain.Slot, error) {
 	}
 	return availableSlots, nil
 }
-func (s *SlotInMemmory) FindSlotTypebyID(SlotID int) string {
+func (s *SlotInMemmory) FindSlotTypebyID(SlotID int) (string, error) {
 
 	existSlot, ok := s.slots[SlotID]
 	if !ok {
-		return "not exists slot of this slotid"
+		return "", fmt.Errorf("no slot found for this id")
 	}
-	return existSlot.SlotType
+	return existSlot.SlotType, nil
 }
 func (s *SlotInMemmory) FindSlotByID(SlotId int) (*domain.Slot, error) {
 	existsSlot, ok := s.slots[SlotId]

@@ -74,16 +74,15 @@ func (s *ParkingService) UnparkVehicle(VehicleNumber string) (float64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("ticket of this vehiclenumber not found")
 	}
-
+	slot, err := s.SlotRepo.FindSlotByID(ticket.SlotId)
+	if err != nil {
+		return 0, fmt.Errorf("failed to fetch slot: %w", err)
+	}
 	fee, err := s.CalculateFee(ticket.SlotId, ticket.EntryTime, ExitTime)
 	if err != nil {
 		return 0, fmt.Errorf("unable to calculate fee %w", err)
 	}
 
-	slot, err := s.SlotRepo.FindSlotByID(ticket.SlotId)
-	if err != nil {
-		return 0, fmt.Errorf("failed to fetch slot: %w", err)
-	}
 	slot.IsFree = true
 	if err := s.SlotRepo.UpdateSlot(slot); err != nil {
 		return 0, fmt.Errorf("failed to update slot status: %w", err)
@@ -110,7 +109,7 @@ func (s *ParkingService) GetAvailableSlots() ([]domain.Slot, error) {
 }
 
 func (s *ParkingService) CalculateFee(SlotId int, EntryTime time.Time, ExistTime time.Time) (float64, error) {
-	slottype := s.SlotRepo.FindSlotTypebyID(SlotId)
+	slottype, _ := s.SlotRepo.FindSlotTypebyID(SlotId)
 	duration := ExistTime.Sub(EntryTime)
 
 	switch slottype {

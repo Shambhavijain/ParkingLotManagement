@@ -16,15 +16,16 @@ func NewTicketRepo(db *sql.DB) *TicketRepo {
 func (t *TicketRepo) SaveTicket(ticket domain.Ticket) error {
 	_, err := t.db.Exec("INSERT INTO  tickets (ticketid,vehiclenumber,entrytime,slotid)VALUE (?,?,?,?)",
 		ticket.TicketId, ticket.VehicleNumber, ticket.EntryTime, ticket.SlotId)
-
-	return err
-
+	if err != nil {
+		return ErrDBQueryFailed
+	}
+	return nil
 }
 func (t *TicketRepo) DeleteTicket(ticketid int64) error {
 	_, err := t.db.Exec("DELETE FROM tickets WHERE ticketid=?", ticketid)
 
 	if err != nil {
-		return err
+		return ErrDBQueryFailed
 	}
 	return nil
 }
@@ -36,12 +37,12 @@ func (t *TicketRepo) FindTicketByVehicleNumber(Vehiclenumber string) (*domain.Ti
 	row := t.db.QueryRow("SELECT ticketid, vehiclenumber, entrytime, slotid FROM tickets WHERE vehiclenumber = ?", Vehiclenumber)
 	err := row.Scan(&Ticket.TicketId, &Ticket.VehicleNumber, &entryTimeStr, &Ticket.SlotId)
 	if err != nil {
-		return nil, err
+		return nil, ErrDBQueryFailed
 	}
 
 	Ticket.EntryTime, err = time.Parse("2006-01-02 15:04:05", entryTimeStr)
 	if err != nil {
-		return nil, err
+		return nil, Wrap("error parsing entry time", err)
 	}
 
 	return &Ticket, nil

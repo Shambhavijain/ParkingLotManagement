@@ -1,6 +1,7 @@
 package inmemmory
 
 import (
+	"database/sql"
 	"fmt"
 	"parkingSlotManagement/internals/core/domain"
 )
@@ -28,7 +29,6 @@ func (t *TicketInMemmory) DeleteTicket(ticketid int64) error {
 }
 func (t *TicketInMemmory) FindTicketByVehicleNumber(vehiclenumber string) (*domain.Ticket, error) {
 
-	fmt.Println("Available ticket IDs:")
 	for id := range t.Tickets {
 		fmt.Println(id)
 	}
@@ -38,5 +38,6 @@ func (t *TicketInMemmory) FindTicketByVehicleNumber(vehiclenumber string) (*doma
 			return ticket, nil
 		}
 	}
-	return nil, fmt.Errorf("unable to find ticket of %s vehiclenumber", vehiclenumber)
+	return nil, sql.ErrNoRows
+
 }
