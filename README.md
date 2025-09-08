@@ -57,10 +57,10 @@ Base URL: `http://localhost:8080`
 | Method | Endpoint              | Description                        |
 |--------|-----------------------|------------------------------------|
 | POST   | `/login`              | Admin login (returns JWT token)    |
-| POST   | `/parkvehicle`        | Park a vehicle                     |
-| POST   | `/unparkvehicle`      | Unpark a vehicle                   |
-| POST   | `/addslot`            | Add a new parking slot             |
-| GET    | `/getavailableslots`  | View all available slots           |
+| POST   | `/ParkVehicle`        | Park a vehicle                     |
+| POST   | `/UnparkVehicle`      | Unpark a vehicle                   |
+| POST   | `/AddSlot`            | Add a new parking slot             |
+| GET    | `/GetAvailableSlots`  | View all available slots           |
 
 >  **Note**: Except `/login`, all endpoints require a valid JWT token in the `Authorization` header.
 
