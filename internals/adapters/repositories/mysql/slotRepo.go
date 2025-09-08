@@ -18,7 +18,7 @@ func (r *SlotRepo) SaveSlot(slot domain.Slot) error {
 		slot.SlotId, slot.SlotType, slot.IsFree)
 
 	if err != nil {
-		return Wrap("error inserting slo", err)
+		return Wrap("error inserting slot", err)
 	}
 	return nil
 

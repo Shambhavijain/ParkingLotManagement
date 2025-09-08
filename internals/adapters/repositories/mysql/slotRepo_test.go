@@ -76,7 +76,7 @@ func TestUpdateSlot(t *testing.T) {
 			slot: domain.Slot{SlotId: 1, SlotType: "car", IsFree: false},
 			mockFunc: func() {
 				mock.ExpectExec("UPDATE slots SET slottype=?, isfree=? WHERE slotid=?").
-					WithArgs(1, "car", false).
+					WithArgs("car", false, 1).
 					WillReturnResult(sqlmock.NewResult(0, 1))
 			},
 			expectedError: false,
@@ -86,7 +86,7 @@ func TestUpdateSlot(t *testing.T) {
 			slot: domain.Slot{SlotId: 1, SlotType: "car", IsFree: false},
 			mockFunc: func() {
 				mock.ExpectExec("UPDATE slots SET slottype=?, isfree=? WHERE slotid=?").
-					WithArgs(1, "car", false).
+					WithArgs("car", false, 1).
 					WillReturnError(errors.New("error updating slot"))
 			},
 			expectedError: true,
@@ -137,11 +137,8 @@ func TestListAvailableSlots(t *testing.T) {
 				mock.ExpectQuery("SELECT slotid,slottype,isfree FROM slots WHERE isfree=true").
 					WillReturnError(errors.New("error fetching slots"))
 			},
-			expectedSlots: []domain.Slot{
-				{SlotId: 1, SlotType: "car", IsFree: true},
-				{SlotId: 2, SlotType: "bike", IsFree: true},
-			},
-			expectedError: false,
+			expectedSlots: nil,
+			expectedError: true,
 		},
 	}
 	for _, tt := range tests {
@@ -155,5 +152,59 @@ func TestListAvailableSlots(t *testing.T) {
 			}
 			assert.Nil(t, mock.ExpectationsWereMet())
 		})
+	}
+}
+
+func TestFindSlotByType(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+	SlotRepo := NewSlotRepo(db)
+	tests := []struct {
+		name          string
+		slotType      string
+		mockFunc      func(slotType string)
+		expectedSlots []domain.Slot
+		expectedError bool
+	}{
+		{
+			name:     "successfully get slots by type",
+			slotType: "car",
+			mockFunc: func(slotType string) {
+				mock.ExpectQuery("SELECT slotid,slottype,isfree FROM slots where slottype=? AND isfree=true").
+					WithArgs(slotType).
+					WillReturnRows(sqlmock.NewRows([]string{"slotid", "slottype", "isfree"}).
+						AddRow(1, "car", true).
+						AddRow(2, "bike", true))
+
+			},
+			expectedSlots: []domain.Slot{
+				{SlotId: 1, SlotType: "car", IsFree: true},
+			},
+			expectedError: false,
+		},
+		{
+			name:     "failed get slots by type",
+			slotType: "car",
+			mockFunc: func(slotType string) {
+				mock.ExpectQuery("SELECT slotid,slottype,isfree FROM slots where slottype=? AND isfree=true").
+					WithArgs(slotType).
+					WillReturnError(errors.New("error fetching slot by type"))
+			},
+			expectedSlots: nil,
+			expectedError: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.mockFunc(tt.slotType)
+		})
+		_, err := SlotRepo.FindSlotByType(tt.slotType)
+		if tt.expectedError {
+			assert.Error(t, err)
+		} else {
+			assert.NoError(t, err)
+		}
+		assert.Nil(t, mock.ExpectationsWereMet())
 	}
 }
