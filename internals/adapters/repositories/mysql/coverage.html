@@ -55,13 +55,13 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">parkingSlotManagement/internals/adapters/repositories/mysql/errors.go (66.7%)</option>
+				<option value="file0">parkingSlotManagement/internals/adapters/repositories/mysql/errors.go (100.0%)</option>
 				
 				<option value="file1">parkingSlotManagement/internals/adapters/repositories/mysql/mysql.go (0.0%)</option>
 				
 				<option value="file2">parkingSlotManagement/internals/adapters/repositories/mysql/slotRepo.go (92.3%)</option>
 				
-				<option value="file3">parkingSlotManagement/internals/adapters/repositories/mysql/ticketRepo.go (94.7%)</option>
+				<option value="file3">parkingSlotManagement/internals/adapters/repositories/mysql/ticketRepo.go (90.5%)</option>
 				
 				</select>
 			</div>
@@ -95,7 +95,7 @@ func Wrap(content string, err error) error <span class="cov8" title="1">{
 
                 return fmt.Errorf("%s: %w", content, err)
         }</span>
-        <span class="cov0" title="0">return nil</span>
+        <span class="cov8" title="1">return nil</span>
 }
 </pre>
 		
@@ -119,7 +119,9 @@ var (
 
 func GetInstance() *sql.DB <span class="cov0" title="0">{
         once.Do(func() </span><span class="cov0" title="0">{
-                err := godotenv.Load()
+
+                err := godotenv.Load("../.env")
+
                 if err != nil </span><span class="cov0" title="0">{
                         log.Fatalf("Error loading .env file:%v", err)
                 }</span>
@@ -290,9 +292,13 @@ func (t *TicketRepo) FindTicketByVehicleNumber(Vehiclenumber string) (*domain.Ti
 
         row := t.db.QueryRow("SELECT ticketid, vehiclenumber, entrytime, slotid FROM tickets WHERE vehiclenumber = ?", Vehiclenumber)
         err := row.Scan(&amp;Ticket.TicketId, &amp;Ticket.VehicleNumber, &amp;entryTimeStr, &amp;Ticket.SlotId)
+
         if err != nil </span><span class="cov8" title="1">{
-                return nil, ErrDBQueryFailed
-        }</span>
+                if err == sql.ErrNoRows </span><span class="cov0" title="0">{
+                        return nil, nil // No ticket found, not an error
+                }</span>
+                <span class="cov8" title="1">return nil, ErrDBQueryFailed</span>
+        }
 
         <span class="cov8" title="1">Ticket.EntryTime, err = time.Parse("2006-01-02 15:04:05", entryTimeStr)
         if err != nil </span><span class="cov0" title="0">{

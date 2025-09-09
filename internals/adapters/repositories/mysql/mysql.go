@@ -18,6 +18,7 @@ var (
 
 func GetInstance() *sql.DB {
 	once.Do(func() {
+
 		err := godotenv.Load("../.env")
 
 		if err != nil {
