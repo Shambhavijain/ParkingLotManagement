@@ -22,6 +22,7 @@ func main() {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
+	//if we use inmemmory instance
 	// slotRepo := inmemmory.NewSlotInMemmory()
 	// ticketRepo := inmemmory.NewTicketInMemmory()
 
@@ -33,6 +34,7 @@ func main() {
 
 	authService := auth.NewAuthService()
 
+	// in inmemmory save few slots already
 	// slotRepo.SaveSlot(domain.Slot{SlotId: 1, SlotType: "car", IsFree: true})
 	// slotRepo.SaveSlot(domain.Slot{SlotId: 2, SlotType: "car", IsFree: true})
 	// slotRepo.SaveSlot(domain.Slot{SlotId: 3, SlotType: "bike", IsFree: true})
