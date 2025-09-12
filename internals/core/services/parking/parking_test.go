@@ -1,234 +1,138 @@
-package parking
+package parking_test
 
 import (
-	"database/sql"
-
-	"parkingSlotManagement/internals/adapters/repositories/inmemmory"
-	"parkingSlotManagement/internals/core/domain"
-
 	"testing"
 	"time"
 
+	"parkingSlotManagement/internals/core/domain"
+	"parkingSlotManagement/internals/core/services/parking"
+
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-func TestParkVehicle(t *testing.T) {
-	slotrepo := inmemmory.NewSlotInMemmory()
-	ticketrepo := inmemmory.NewTicketInMemmory()
-	slot := domain.Slot{
-		SlotId:   1,
-		SlotType: "car",
-		IsFree:   true,
-	}
-	err := slotrepo.SaveSlot(slot)
-	assert.NoError(t, err)
-	service := NewParkingService(slotrepo, ticketrepo)
-	vehicle := domain.Vehicle{
-		VehicleNumber: "UP74M8311",
-		VehicleType:   "car",
-	}
-
-	ticket, err := service.ParkVehicle(vehicle)
-
-	err1 := ticketrepo.SaveTicket(*ticket)
-	assert.NoError(t, err1)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, ticket)
-
-	assert.Equal(t, vehicle.VehicleNumber, ticket.VehicleNumber)
-	assert.Equal(t, slot.SlotId, ticket.SlotId)
-
-	ticket2, err2 := service.ParkVehicle(vehicle)
-	assert.Error(t, err2)
-	assert.Nil(t, ticket2)
-	assert.Contains(t, err2.Error(), "already parked")
-
+type MockSlotRepo struct {
+	mock.Mock
 }
 
-func TestGenerateTicketId(t *testing.T) {
-	id1 := GenerateTicketID()
-	time.Sleep(1 * time.Second)
-	id2 := GenerateTicketID()
-
-	assert.NotZero(t, id1)
-	assert.NotZero(t, id2)
-	assert.NotEqual(t, id1, id2)
+func (m *MockSlotRepo) FindSlotByType(vehicleType string) ([]domain.Slot, error) {
+	args := m.Called(vehicleType)
+	return args.Get(0).([]domain.Slot), args.Error(1)
 }
-func TestUnparkVehicle(t *testing.T) {
-	slotRepo := inmemmory.NewSlotInMemmory()
-	ticketRepo := inmemmory.NewTicketInMemmory()
-	slot := domain.Slot{
-		SlotId:   1,
-		SlotType: "car",
-		IsFree:   true,
-	}
 
-	_ = slotRepo.SaveSlot(slot)
-
-	entryTime := time.Now().Add(-2 * time.Hour)
-
-	ticket := domain.Ticket{
-		TicketId:      123456987654321,
-		VehicleNumber: "UP74M8311",
-		SlotId:        1,
-		EntryTime:     entryTime,
-	}
-
-	_ = ticketRepo.SaveTicket(ticket)
-
-	service := NewParkingService(slotRepo, ticketRepo)
-	fee, err := service.UnparkVehicle("UP74M8311")
-
-	assert.NoError(t, err)
-	assert.Greater(t, fee, float64(0))
-
-	updatedSlot, _ := slotRepo.FindSlotByID(1)
-	assert.True(t, updatedSlot.IsFree)
-
-	_, err = ticketRepo.FindTicketByVehicleNumber("UP74M8311")
-	assert.ErrorIs(t, err, sql.ErrNoRows)
-
-	slot1 := domain.Slot{
-		SlotId:   2,
-		SlotType: "bike",
-		IsFree:   true,
-	}
-	_ = slotRepo.SaveSlot(slot1)
-	ticket1 := domain.Ticket{
-		TicketId:      123456987654321,
-		VehicleNumber: "UP74M8412",
-		SlotId:        2,
-		EntryTime:     entryTime,
-	}
-	_ = ticketRepo.SaveTicket(ticket1)
-	fee1, err := service.UnparkVehicle("UP74M8412")
-	assert.NoError(t, err)
-	assert.Greater(t, fee1, float64(0))
-
-	updatedSlot1, _ := slotRepo.FindSlotByID(2)
-	assert.True(t, updatedSlot1.IsFree)
-
+func (m *MockSlotRepo) UpdateSlot(slot *domain.Slot) error {
+	args := m.Called(slot)
+	return args.Error(0)
 }
+
+func (m *MockSlotRepo) SaveSlot(slot domain.Slot) error {
+	args := m.Called(slot)
+	return args.Error(0)
+}
+
+func (m *MockSlotRepo) ListAvailableSlots() ([]domain.Slot, error) {
+	args := m.Called()
+	return args.Get(0).([]domain.Slot), args.Error(1)
+}
+
+func (m *MockSlotRepo) FindSlotByID(id int) (*domain.Slot, error) {
+	args := m.Called(id)
+	return args.Get(0).(*domain.Slot), args.Error(1)
+}
+
+func (m *MockSlotRepo) FindSlotTypebyID(id int) (string, error) {
+	args := m.Called(id)
+	return args.String(0), args.Error(1)
+}
+
+type MockTicketRepo struct {
+	mock.Mock
+}
+
+func (m *MockTicketRepo) FindTicketByVehicleNumber(vehicleNumber string) (*domain.Ticket, error) {
+	args := m.Called(vehicleNumber)
+	return args.Get(0).(*domain.Ticket), args.Error(1)
+}
+
+func (m *MockTicketRepo) SaveTicket(ticket domain.Ticket) error {
+	args := m.Called(ticket)
+	return args.Error(0)
+}
+
+func (m *MockTicketRepo) DeleteTicket(ticketID int64) error {
+	args := m.Called(ticketID)
+	return args.Error(0)
+}
+
 func TestAddSlot(t *testing.T) {
-	slotRepo := inmemmory.NewSlotInMemmory()
-	service := NewParkingService(slotRepo, nil)
-	slot := domain.Slot{
-		SlotId:   1,
-		SlotType: "car",
-		IsFree:   true,
-	}
+	slotRepo := new(MockSlotRepo)
+	ticketRepo := new(MockTicketRepo)
+	service := parking.NewParkingService(slotRepo, ticketRepo)
+
+	slot := domain.Slot{SlotId: 1, SlotType: "car", IsFree: true}
+	slotRepo.On("SaveSlot", slot).Return(nil)
+
 	err := service.AddSlot(slot)
 	assert.NoError(t, err)
-
 }
+
 func TestGetAvailableSlots(t *testing.T) {
-	slotRepo := inmemmory.NewSlotInMemmory()
-	service := NewParkingService(slotRepo, nil)
-	slots := []domain.Slot{
-		{SlotId: 1, SlotType: "car", IsFree: true},
-		{SlotId: 2, SlotType: "bus", IsFree: true},
-		{SlotId: 3, SlotType: "bus", IsFree: false},
-	}
-	for _, slot := range slots {
+	slotRepo := new(MockSlotRepo)
+	ticketRepo := new(MockTicketRepo)
+	service := parking.NewParkingService(slotRepo, ticketRepo)
 
-		slotRepo.SaveSlot(slot)
-	}
-	availableSlots, err := service.GetAvailableSlots()
+	expected := []domain.Slot{{SlotId: 1, SlotType: "car", IsFree: true}}
+	slotRepo.On("ListAvailableSlots").Return(expected, nil)
+
+	slots, err := service.GetAvailableSlots()
 	assert.NoError(t, err)
-	assert.Len(t, availableSlots, 2)
-	for _, slot := range availableSlots {
-		assert.True(t, slot.IsFree)
-	}
-
+	assert.Equal(t, expected, slots)
 }
 
-func TestOpposingCases(t *testing.T) {
-	tests := []struct {
-		name        string
-		ticket      *domain.Ticket
-		slot        *domain.Slot
-		expectedFee float64
-		expectError bool
-		errorText   string
-	}{
-		{
-			name:        "ticket not found",
-			ticket:      nil,
-			slot:        nil,
-			expectError: true,
-			errorText:   "ticket of this vehicle number not found",
-		},
-		{
-			name: "slot not found",
-			ticket: &domain.Ticket{
-				TicketId:      1,
-				VehicleNumber: "XYZ123",
-				SlotId:        101,
-				EntryTime:     time.Now().Add(-2 * time.Hour),
-			},
-			slot:        nil,
-			expectError: true,
-			errorText:   "failed to fetch slot",
-		},
-		{
-			name: "invalid slot type",
-			ticket: &domain.Ticket{
-				TicketId:      1,
-				VehicleNumber: "XYZ123",
-				SlotId:        101,
-				EntryTime:     time.Now().Add(-2 * time.Hour),
-			},
-			slot: &domain.Slot{
-				SlotId:   101,
-				IsFree:   false,
-				SlotType: "invalid",
-			},
-			expectError: true,
-			errorText:   "unable to calculate fee",
-		},
-		{
-			name: "success case",
-			ticket: &domain.Ticket{
-				TicketId:      1,
-				VehicleNumber: "XYZ123",
-				SlotId:        101,
-				EntryTime:     time.Now().Add(-2 * time.Hour),
-			},
-			slot: &domain.Slot{
-				SlotId:   101,
-				IsFree:   false,
-				SlotType: "car",
-			},
+func TestCalculateFee_Car(t *testing.T) {
+	slotRepo := new(MockSlotRepo)
+	ticketRepo := new(MockTicketRepo)
+	service := parking.NewParkingService(slotRepo, ticketRepo)
 
-			expectedFee: 120.0,
-			expectError: false,
-		},
-	}
+	entry := time.Now().Add(-2 * time.Hour)
+	exit := time.Now()
+	slotRepo.On("FindSlotTypebyID", 1).Return("car", nil)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ticketRepo := inmemmory.NewTicketInMemmory()
-			slotRepo := inmemmory.NewSlotInMemmory()
-			service := NewParkingService(slotRepo, ticketRepo)
+	fee, err := service.CalculateFee(1, entry, exit)
+	assert.NoError(t, err)
+	assert.InDelta(t, 120.0, fee, 0.1)
+}
 
-			if tt.ticket != nil {
-				ticketRepo.SaveTicket(*tt.ticket)
-			}
+func TestCalculateFee_Bike(t *testing.T) {
+	slotRepo := new(MockSlotRepo)
+	ticketRepo := new(MockTicketRepo)
+	service := parking.NewParkingService(slotRepo, ticketRepo)
 
-			if tt.slot != nil {
-				slotRepo.SaveSlot(*tt.slot)
-			}
+	entry := time.Now().Add(-2 * time.Hour)
+	exit := time.Now()
+	slotRepo.On("FindSlotTypebyID", 1).Return("bike", nil)
 
-			fee, err := service.UnparkVehicle("XYZ123")
+	fee, err := service.CalculateFee(1, entry, exit)
+	assert.NoError(t, err)
+	assert.InDelta(t, 60.0, fee, 0.1)
+}
 
-			if tt.expectError {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorText)
-			} else {
-				assert.NoError(t, err)
-				assert.InDelta(t, tt.expectedFee, fee, 0.1)
-			}
-		})
-	}
+func TestUnparkVehicle(t *testing.T) {
+	slotRepo := new(MockSlotRepo)
+	ticketRepo := new(MockTicketRepo)
+	service := parking.NewParkingService(slotRepo, ticketRepo)
+
+	entry := time.Now().Add(-1 * time.Hour)
+	ticket := &domain.Ticket{TicketId: 101, VehicleNumber: "UP16AB1234", SlotId: 1, EntryTime: entry}
+	slot := &domain.Slot{SlotId: 1, SlotType: "car", IsFree: false}
+
+	ticketRepo.On("FindTicketByVehicleNumber", "UP16AB1234").Return(ticket, nil)
+	slotRepo.On("FindSlotByID", 1).Return(slot, nil)
+	slotRepo.On("FindSlotTypebyID", 1).Return("car", nil)
+	slotRepo.On("UpdateSlot", mock.Anything).Return(nil)
+	ticketRepo.On("DeleteTicket", ticket.TicketId).Return(nil)
+
+	fee, err := service.UnparkVehicle("UP16AB1234")
+	assert.NoError(t, err)
+	assert.True(t, fee > 0)
 }

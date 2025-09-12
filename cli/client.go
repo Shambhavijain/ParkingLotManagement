@@ -22,30 +22,17 @@ func main() {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
-	//if we use inmemmory instance
-	// slotRepo := inmemmory.NewSlotInMemmory()
-	// ticketRepo := inmemmory.NewTicketInMemmory()
-
 	database := mysql.GetInstance()
 	slotRepo := mysql.NewSlotRepo(database)
 	ticketRepo := mysql.NewTicketRepo(database)
-
+	userRepo := mysql.NewMySQLUserRepository(database)
 	service := parking.NewParkingService(slotRepo, ticketRepo)
 
-	authService := auth.NewAuthService()
-
-	// in inmemmory save few slots already
-	// slotRepo.SaveSlot(domain.Slot{SlotId: 1, SlotType: "car", IsFree: true})
-	// slotRepo.SaveSlot(domain.Slot{SlotId: 2, SlotType: "car", IsFree: true})
-	// slotRepo.SaveSlot(domain.Slot{SlotId: 3, SlotType: "bike", IsFree: true})
-	// slotRepo.SaveSlot(domain.Slot{SlotId: 4, SlotType: "bike", IsFree: true})
+	authService := auth.NewAuthService(userRepo)
 
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Welcome to Parking Lot Management System ")
 	time.Sleep(500 * time.Millisecond)
-
-	// adminUsername := os.Getenv("ADMIN_USERNAME")
-	// adminPassword := os.Getenv("ADMIN_PASSWORD")
 
 	for {
 		fmt.Print("Enter username: ")

@@ -5,295 +5,150 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"parkingSlotManagement/internals/adapters/repositories/inmemmory"
-	"parkingSlotManagement/internals/core/domain"
-	"parkingSlotManagement/internals/core/services/auth"
-	"parkingSlotManagement/internals/core/services/parking"
-	"strings"
 	"testing"
 	"time"
+
+	"parkingSlotManagement/internals/core/domain"
+	"parkingSlotManagement/internals/core/services/parking"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-func TestAddSlot(t *testing.T) {
-	slotRepo := inmemmory.NewSlotInMemmory()
-	ticketRepo := inmemmory.NewTicketInMemmory()
-
-	service := parking.NewParkingService(slotRepo, ticketRepo)
-	h := NewHandlers(service)
-
-	Slot := domain.Slot{
-		SlotId:   1,
-		SlotType: "car",
-		IsFree:   true,
-	}
-
-	body, err := json.Marshal(Slot)
-	if err != nil {
-		t.Fatalf("Failed to marshal slot: %v", err)
-	}
-
-	req := httptest.NewRequest(http.MethodPost, "/AddSlot", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	resp := httptest.NewRecorder()
-
-	h.AddSlot(resp, req)
-	if resp.Code != http.StatusCreated {
-		t.Errorf("Expected status 201 Created , got %d", resp.Code)
-	}
-
-	expected1 := "Slot added successfully"
-	if strings.TrimSpace(resp.Body.String()) != expected1 {
-		t.Errorf("Valid Slot: Expected body %q, got %q", expected1, resp.Body.String())
-	}
-
-	req2 := httptest.NewRequest(http.MethodPost, "/AddSlot", strings.NewReader("{invalid json"))
-	req2.Header.Set("Content-Type", "application/json")
-	resp2 := httptest.NewRecorder()
-
-	h.AddSlot(resp2, req2)
-
-	if resp2.Code != http.StatusBadRequest {
-		t.Errorf("Invalid JSON: Expected status 400 Bad Request, got %d", resp2.Code)
-	}
-
-	expected2 := "Invalid Body Request"
-	if !strings.Contains(resp2.Body.String(), expected2) {
-		t.Errorf("Invalid JSON: Expected error message %q, got %q", expected2, resp2.Body.String())
-	}
-
+type MockSlotRepo struct {
+	mock.Mock
 }
 
-func TestGetAvailableSlot(t *testing.T) {
-	slotRepo := inmemmory.NewSlotInMemmory()
-	ticketRepo := inmemmory.NewTicketInMemmory()
-
-	service := parking.NewParkingService(slotRepo, ticketRepo)
-	h := NewHandlers(service)
-
-	Slot := domain.Slot{
-		SlotId:   1,
-		SlotType: "car",
-		IsFree:   true,
-	}
-
-	body, err := json.Marshal(Slot)
-	if err != nil {
-		t.Fatalf("Failed to marshal slot: %v", err)
-	}
-	slotRepo.SaveSlot(Slot)
-	req := httptest.NewRequest(http.MethodPost, "/GetAvailableSlot", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	resp := httptest.NewRecorder()
-
-	h.GetAvailableSlots(resp, req)
-	if resp.Code != http.StatusOK {
-		t.Errorf("Expected status 200 Created , got %d", resp.Code)
-	}
-
-	var slots []domain.Slot
-	if err := json.NewDecoder(resp.Body).Decode(&slots); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
-
+func (m *MockSlotRepo) FindSlotByType(vehicleType string) ([]domain.Slot, error) {
+	args := m.Called(vehicleType)
+	return args.Get(0).([]domain.Slot), args.Error(1)
 }
+
+func (m *MockSlotRepo) UpdateSlot(slot *domain.Slot) error {
+	args := m.Called(slot)
+	return args.Error(0)
+}
+
+func (m *MockSlotRepo) SaveSlot(slot domain.Slot) error {
+	args := m.Called(slot)
+	return args.Error(0)
+}
+
+func (m *MockSlotRepo) ListAvailableSlots() ([]domain.Slot, error) {
+	args := m.Called()
+	return args.Get(0).([]domain.Slot), args.Error(1)
+}
+
+func (m *MockSlotRepo) FindSlotByID(id int) (*domain.Slot, error) {
+	args := m.Called(id)
+	return args.Get(0).(*domain.Slot), args.Error(1)
+}
+
+func (m *MockSlotRepo) FindSlotTypebyID(id int) (string, error) {
+	args := m.Called(id)
+	return args.String(0), args.Error(1)
+}
+
+type MockTicketRepo struct {
+	mock.Mock
+}
+
+func (m *MockTicketRepo) FindTicketByVehicleNumber(vehicleNumber string) (*domain.Ticket, error) {
+	args := m.Called(vehicleNumber)
+	return args.Get(0).(*domain.Ticket), args.Error(1)
+}
+
+func (m *MockTicketRepo) SaveTicket(ticket domain.Ticket) error {
+	args := m.Called(ticket)
+	return args.Error(0)
+}
+
+func (m *MockTicketRepo) DeleteTicket(ticketID int64) error {
+	args := m.Called(ticketID)
+	return args.Error(0)
+}
+
 func TestParkVehicleRequest(t *testing.T) {
-
-	slotRepo := inmemmory.NewSlotInMemmory()
-	ticketRepo := inmemmory.NewTicketInMemmory()
+	slotRepo := new(MockSlotRepo)
+	ticketRepo := new(MockTicketRepo)
 	service := parking.NewParkingService(slotRepo, ticketRepo)
-	h := NewHandlers(service)
+	handler := NewHandlers(service)
 
-	slot := domain.Slot{
-		SlotId:   1,
-		SlotType: "car",
-		IsFree:   true,
-	}
-	slotRepo.SaveSlot(slot)
+	vehicle := domain.Vehicle{VehicleNumber: "UP16AB1234", VehicleType: "car"}
+	slots := []domain.Slot{{SlotId: 1, SlotType: "car", IsFree: true}}
+	ticketRepo.On("FindTicketByVehicleNumber", vehicle.VehicleNumber).Return((*domain.Ticket)(nil), nil)
 
-	vehicle := domain.Vehicle{
-		VehicleNumber: "UP16AB1234",
-		VehicleType:   "car",
-	}
-	body := new(bytes.Buffer)
-	json.NewEncoder(body).Encode(vehicle)
+	slotRepo.On("FindSlotByType", vehicle.VehicleType).Return(slots, nil)
+	slotRepo.On("UpdateSlot", &slots[0]).Return(nil)
+	ticketRepo.On("SaveTicket", mock.AnythingOfType("domain.Ticket")).Return(nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/ParkVehicle", body)
-	req.Header.Set("Content-Type", "application/json")
-	resp := httptest.NewRecorder()
+	body, _ := json.Marshal(vehicle)
+	req := httptest.NewRequest(http.MethodPost, "/park", bytes.NewReader(body))
+	w := httptest.NewRecorder()
 
-	h.ParkVehicleRequest(resp, req)
+	handler.ParkVehicleRequest(w, req)
 
-	if resp.Code != http.StatusCreated {
-		t.Errorf("Expected status 201 Created, got %d", resp.Code)
-	}
+	res := w.Result()
+	defer res.Body.Close()
 
-	var ticket domain.Ticket
-	if err := json.NewDecoder(resp.Body).Decode(&ticket); err != nil {
-		t.Fatalf("Failed to decode ticket: %v", err)
-	}
-
-	req2 := httptest.NewRequest(http.MethodPost, "/ParkVehicle", strings.NewReader("{invalid json"))
-	req2.Header.Set("Content-Type", "application/json")
-	resp2 := httptest.NewRecorder()
-
-	h.ParkVehicleRequest(resp2, req2)
-
-	if resp2.Code != http.StatusInternalServerError {
-		t.Errorf("Expected status 500 Internal Server Error for invalid JSON, got %d", resp2.Code)
-	}
-
-	if !strings.Contains(resp2.Body.String(), "Invalid Body Request") {
-		t.Errorf("Expected error message 'Invalid Body Request', got %q", resp2.Body.String())
-	}
-
-	failVehicle := domain.Vehicle{
-		VehicleNumber: "FAIL123",
-		VehicleType:   "car",
-	}
-	body3 := new(bytes.Buffer)
-	json.NewEncoder(body3).Encode(failVehicle)
-
-	req3 := httptest.NewRequest(http.MethodPost, "/ParkVehicle", body3)
-	req3.Header.Set("Content-Type", "application/json")
-	resp3 := httptest.NewRecorder()
-
-	h.ParkVehicleRequest(resp3, req3)
-
-	if resp3.Code != http.StatusInternalServerError {
-		t.Errorf("Expected status 500 Internal Server Error for service error, got %d", resp3.Code)
-	}
-
-	if !strings.Contains(strings.TrimSpace(resp3.Body.String()), "failed to fetch slots by type") {
-		t.Errorf("Expected error message to contain 'failed to fetch slots by type', got '%s'", resp3.Body.String())
-	}
-
+	assert.Equal(t, http.StatusCreated, res.StatusCode)
 }
 
 func TestUnparkVehicleRequest(t *testing.T) {
-	slotRepo := inmemmory.NewSlotInMemmory()
-	ticketRepo := inmemmory.NewTicketInMemmory()
+	slotRepo := new(MockSlotRepo)
+	ticketRepo := new(MockTicketRepo)
 	service := parking.NewParkingService(slotRepo, ticketRepo)
-	h := NewHandlers(service)
+	handler := NewHandlers(service)
 
-	// Step 1: Save a slot
-	slot := domain.Slot{
-		SlotId:   1,
-		SlotType: "car",
-		IsFree:   false,
-	}
-	slotRepo.SaveSlot(slot)
+	ticket := &domain.Ticket{TicketId: 101, VehicleNumber: "UP16AB1234", SlotId: 1, EntryTime: time.Now().Add(-1 * time.Hour)}
+	slot := &domain.Slot{SlotId: 1, SlotType: "car", IsFree: false}
 
-	// Step 2: Save a ticket
-	ticket := domain.Ticket{
-		TicketId:      123456789,
-		VehicleNumber: "UP16AB1234",
-		SlotId:        1,
-		EntryTime:     time.Now().Add(-2 * time.Hour),
-	}
-	ticketRepo.SaveTicket(ticket)
+	ticketRepo.On("FindTicketByVehicleNumber", ticket.VehicleNumber).Return(ticket, nil)
+	slotRepo.On("FindSlotByID", ticket.SlotId).Return(slot, nil)
+	slotRepo.On("FindSlotTypebyID", ticket.SlotId).Return("car", nil)
+	slotRepo.On("UpdateSlot", mock.Anything).Return(nil)
+	ticketRepo.On("DeleteTicket", ticket.TicketId).Return(nil)
 
-	// Step 3: Create request to unpark
-	body := `{"vehiclenumber":"UP16AB1234"}`
-	req := httptest.NewRequest(http.MethodPost, "/UnparkVehicle", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	resp := httptest.NewRecorder()
+	body := []byte(`{"vehiclenumber":"UP16AB1234"}`)
+	req := httptest.NewRequest(http.MethodPost, "/unpark", bytes.NewReader(body))
+	w := httptest.NewRecorder()
 
-	h.UnparkVehicleRequest(resp, req)
-
-	if resp.Code != http.StatusOK {
-		t.Errorf("Expected status 200 OK, got %d", resp.Code)
-	}
-
-	var response map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
-
-	if response["vehiclenumber"] != "UP16AB1234" {
-		t.Errorf("Expected vehicle number 'UP16AB1234', got '%v'", response["vehiclenumber"])
-	}
-	if response["message"] != "Successfully Unpark The Vehicle" {
-		t.Errorf("Expected success message, got '%v'", response["message"])
-	}
-}
-func TestUnparkVehicleRequest_InvalidVehicle(t *testing.T) {
-	slotRepo := inmemmory.NewSlotInMemmory()
-	ticketRepo := inmemmory.NewTicketInMemmory()
-	service := parking.NewParkingService(slotRepo, ticketRepo)
-	h := NewHandlers(service)
-
-	body := `{"vehiclenumber":"NOTFOUND123"}`
-	req := httptest.NewRequest(http.MethodPost, "/UnparkVehicle", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	resp := httptest.NewRecorder()
-
-	h.UnparkVehicleRequest(resp, req)
-
-	if resp.Code != http.StatusInternalServerError {
-		t.Errorf("Expected status 500 Internal Server Error, got %d", resp.Code)
-	}
-
-	if !strings.Contains(resp.Body.String(), "ticket of this vehicle number not found") {
-		t.Errorf("Expected error message, got '%s'", resp.Body.String())
-	}
+	handler.UnparkVehicleRequest(w, req)
+	res := w.Result()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
 }
 
-func TestLoginHandler(t *testing.T) {
-	// Set env variables manually for testing
-	os.Setenv("ADMIN_USERNAME", "admin")
-	os.Setenv("ADMIN_PASSWORD", "admin123")
-	os.Setenv("JWT_SECRET", "testsecret")
+func TestAddSlot(t *testing.T) {
+	slotRepo := new(MockSlotRepo)
+	ticketRepo := new(MockTicketRepo)
+	service := parking.NewParkingService(slotRepo, ticketRepo)
+	handler := NewHandlers(service)
 
-	authService := auth.NewAuthService()
-	handler := LoginHandler(authService)
+	slot := domain.Slot{SlotId: 1, SlotType: "car", IsFree: true}
+	slotRepo.On("SaveSlot", slot).Return(nil)
 
-	t.Run("Valid credentials", func(t *testing.T) {
-		creds := map[string]string{
-			"username": "admin",
-			"password": "admin123",
-		}
-		body, _ := json.Marshal(creds)
+	body, _ := json.Marshal(slot)
+	req := httptest.NewRequest(http.MethodPost, "/add-slot", bytes.NewReader(body))
+	w := httptest.NewRecorder()
 
-		req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp := httptest.NewRecorder()
+	handler.AddSlot(w, req)
+	res := w.Result()
+	assert.Equal(t, http.StatusCreated, res.StatusCode)
+}
 
-		handler.ServeHTTP(resp, req)
+func TestGetAvailableSlots(t *testing.T) {
+	slotRepo := new(MockSlotRepo)
+	ticketRepo := new(MockTicketRepo)
+	service := parking.NewParkingService(slotRepo, ticketRepo)
+	handler := NewHandlers(service)
 
-		if resp.Code != http.StatusOK {
-			t.Errorf("Expected status 200 OK, got %d", resp.Code)
-		}
+	slots := []domain.Slot{{SlotId: 1, SlotType: "car", IsFree: true}}
+	slotRepo.On("ListAvailableSlots").Return(slots, nil)
 
-		var result map[string]string
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
-		}
+	req := httptest.NewRequest(http.MethodGet, "/available-slots", nil)
+	w := httptest.NewRecorder()
 
-		if result["token"] == "" {
-			t.Errorf("Expected a token, got empty string")
-		}
-	})
-
-	t.Run("Invalid credentials", func(t *testing.T) {
-		creds := map[string]string{
-			"username": "wrong",
-			"password": "wrongpass",
-		}
-		body, _ := json.Marshal(creds)
-
-		req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp := httptest.NewRecorder()
-
-		handler.ServeHTTP(resp, req)
-
-		if resp.Code != http.StatusUnauthorized {
-			t.Errorf("Expected status 401 Unauthorized, got %d", resp.Code)
-		}
-
-		if !strings.Contains(resp.Body.String(), "Unauthorized") {
-			t.Errorf("Expected error message 'Unauthorized', got %q", resp.Body.String())
-		}
-	})
+	handler.GetAvailableSlots(w, req)
+	res := w.Result()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
 }

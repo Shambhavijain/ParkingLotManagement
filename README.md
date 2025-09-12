@@ -1,7 +1,7 @@
 
 #  Parking Lot Management System – CLI & API
 
-This project is a Parking Lot Management System built using **Go**, following **Hexagonal Architecture** and **SOLID principles**. It supports both **CLI-based interaction** and **RESTful APIs** for managing vehicle parking, slot allocation, and ticketing.
+This project is a Parking Lot Management System built using **Go**. It supports  for managing vehicle parking, slot allocation, and ticketing.
 
 ---
 
@@ -33,8 +33,6 @@ parkingSlotManagement/
 Create a `.env` file in the root directory with the following variables:
 
 ```env
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=admin123
 JWT_SECRET=your_jwt_secret_key
 DB_USER=root
 DB_PASSWORD=yourpassword

@@ -90,20 +90,27 @@ func (h *Handlers) GetAvailableSlots(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func LoginHandler(authService auth.AuthService) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var creds struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-		}
-		json.NewDecoder(r.Body).Decode(&creds)
-
-		token, err := authService.Login(creds.Username, creds.Password)
-		if err != nil {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		json.NewEncoder(w).Encode(map[string]string{"token": token})
+func (h *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request, authService *auth.AuthService) {
+	var creds struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
 	}
+
+	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		http.Error(w, "Invalid Body Request", http.StatusBadRequest)
+		return
+	}
+
+	token, err := authService.Login(creds.Username, creds.Password)
+	if err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"token":   token,
+		"message": "Login successful",
+	})
 }
