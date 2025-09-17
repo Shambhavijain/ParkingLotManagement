@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 )
-
+//type AppErr error
 var (
 	ErrTicketNotFound       = errors.New("ticket of this vehicle number not found")
 	ErrSlotNotFound         = errors.New("failed to fetch slot")
@@ -27,3 +27,9 @@ func Wrap(content string, err error) error {
 	}
 	return nil
 }
+
+// func (e AppErr) ToHTTPError() 
+
+// func AppErrToHttpErr(err error) httpError {
+
+// }

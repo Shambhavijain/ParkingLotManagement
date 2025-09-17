@@ -11,7 +11,8 @@ import (
 )
 
 type Handlers struct {
-	service *parking.ParkingService
+	service     *parking.ParkingService
+	authService *auth.AuthService
 }
 
 func NewHandlers(service *parking.ParkingService) *Handlers {
@@ -28,7 +29,7 @@ func (h *Handlers) ParkVehicleRequest(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(vehicle)
 	ticket, err := h.service.ParkVehicle(vehicle)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
 	w.Header().Set("content-type", "application/json")
@@ -90,7 +91,7 @@ func (h *Handlers) GetAvailableSlots(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (h *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request, authService *auth.AuthService) {
+func (h *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	var creds struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -101,7 +102,7 @@ func (h *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request, authServ
 		return
 	}
 
-	token, err := authService.Login(creds.Username, creds.Password)
+	token, err := h.authService.Login(creds.Username, creds.Password)
 	if err != nil {
 		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 		return
