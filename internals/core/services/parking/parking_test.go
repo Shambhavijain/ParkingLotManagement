@@ -136,3 +136,71 @@ func TestUnparkVehicle(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, fee > 0)
 }
+func TestParkVehicle_AlreadyParked(t *testing.T) {
+	slotRepo := new(MockSlotRepo)
+	ticketRepo := new(MockTicketRepo)
+	service := parking.NewParkingService(slotRepo, ticketRepo)
+
+	vehicle := domain.Vehicle{VehicleNumber: "UP16AB1234", VehicleType: "car"}
+	existingTicket := &domain.Ticket{TicketId: 101, VehicleNumber: "UP16AB1234"}
+
+	ticketRepo.On("FindTicketByVehicleNumber", vehicle.VehicleNumber).Return(existingTicket, nil)
+
+	ticket, err := service.ParkVehicle(vehicle)
+	assert.Nil(t, ticket)
+	assert.Equal(t, parking.ErrVehicleAlreadyParked, err)
+}
+
+func TestParkVehicle_ExistingTicketCheckError(t *testing.T) {
+	slotRepo := new(MockSlotRepo)
+	ticketRepo := new(MockTicketRepo)
+	service := parking.NewParkingService(slotRepo, ticketRepo)
+
+	vehicle := domain.Vehicle{VehicleNumber: "UP16AB1234", VehicleType: "car"}
+	ticketRepo.On("FindTicketByVehicleNumber", vehicle.VehicleNumber).Return((*domain.Ticket)(nil), assert.AnError)
+
+	ticket, err := service.ParkVehicle(vehicle)
+	assert.Nil(t, ticket)
+	assert.Equal(t, parking.ErrExistingTicketCheck, err)
+}
+
+func TestParkVehicle_NoAvailableSlot(t *testing.T) {
+	slotRepo := new(MockSlotRepo)
+	ticketRepo := new(MockTicketRepo)
+	service := parking.NewParkingService(slotRepo, ticketRepo)
+
+	vehicle := domain.Vehicle{VehicleNumber: "UP16AB1234", VehicleType: "car"}
+	ticketRepo.On("FindTicketByVehicleNumber", vehicle.VehicleNumber).Return((*domain.Ticket)(nil), nil)
+
+	slotRepo.On("FindSlotByType", vehicle.VehicleType).Return([]domain.Slot{{SlotId: 1, SlotType: "car", IsFree: false}}, nil)
+
+	ticket, err := service.ParkVehicle(vehicle)
+	assert.Nil(t, ticket)
+	assert.Equal(t, parking.ErrSlotFetchByType, err)
+}
+
+func TestUnparkVehicle_TicketNotFound(t *testing.T) {
+	slotRepo := new(MockSlotRepo)
+	ticketRepo := new(MockTicketRepo)
+	service := parking.NewParkingService(slotRepo, ticketRepo)
+
+	ticketRepo.On("FindTicketByVehicleNumber", "UP16AB1234").Return((*domain.Ticket)(nil), nil)
+
+	fee, err := service.UnparkVehicle("UP16AB1234")
+	assert.Equal(t, 0.0, fee)
+	assert.Equal(t, parking.ErrTicketNotFound, err)
+}
+
+func TestUnparkVehicle_SlotNotFound(t *testing.T) {
+	slotRepo := new(MockSlotRepo)
+	ticketRepo := new(MockTicketRepo)
+	service := parking.NewParkingService(slotRepo, ticketRepo)
+
+	ticket := &domain.Ticket{TicketId: 101, VehicleNumber: "UP16AB1234", SlotId: 1, EntryTime: time.Now().Add(-1 * time.Hour)}
+	ticketRepo.On("FindTicketByVehicleNumber", "UP16AB1234").Return(ticket, nil)
+	slotRepo.On("FindSlotByID", 1).Return((*domain.Slot)(nil), nil)
+
+	fee, err := service.UnparkVehicle("UP16AB1234")
+	assert.Equal(t, 0.0, fee)
+	assert.Equal(t, parking.ErrSlotNotFound, err)
+}
