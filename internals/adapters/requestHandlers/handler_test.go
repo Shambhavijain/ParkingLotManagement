@@ -3,152 +3,264 @@ package requestHandlers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"parkingSlotManagement/internals/core/domain"
-	"parkingSlotManagement/internals/core/services/parking"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-type MockSlotRepo struct {
+type MockParkingService struct {
 	mock.Mock
 }
 
-func (m *MockSlotRepo) FindSlotByType(vehicleType string) ([]domain.Slot, error) {
-	args := m.Called(vehicleType)
-	return args.Get(0).([]domain.Slot), args.Error(1)
+func (m *MockParkingService) ParkVehicle(vehicle domain.Vehicle) (*domain.Ticket, error) {
+	args := m.Called(vehicle)
+	return args.Get(0).(*domain.Ticket), args.Error(1)
 }
 
-func (m *MockSlotRepo) UpdateSlot(slot *domain.Slot) error {
+func (m *MockParkingService) UnparkVehicle(vehicleNumber string) (float64, error) {
+	args := m.Called(vehicleNumber)
+	return args.Get(0).(float64), args.Error(1)
+}
+
+func (m *MockParkingService) AddSlot(slot domain.Slot) error {
 	args := m.Called(slot)
 	return args.Error(0)
 }
 
-func (m *MockSlotRepo) SaveSlot(slot domain.Slot) error {
-	args := m.Called(slot)
-	return args.Error(0)
-}
-
-func (m *MockSlotRepo) ListAvailableSlots() ([]domain.Slot, error) {
+func (m *MockParkingService) GetAvailableSlots() ([]domain.Slot, error) {
 	args := m.Called()
 	return args.Get(0).([]domain.Slot), args.Error(1)
 }
 
-func (m *MockSlotRepo) FindSlotByID(id int) (*domain.Slot, error) {
-	args := m.Called(id)
-	return args.Get(0).(*domain.Slot), args.Error(1)
-}
-
-func (m *MockSlotRepo) FindSlotTypebyID(id int) (string, error) {
-	args := m.Called(id)
-	return args.String(0), args.Error(1)
-}
-
-type MockTicketRepo struct {
+type MockAuthService struct {
 	mock.Mock
 }
 
-func (m *MockTicketRepo) FindTicketByVehicleNumber(vehicleNumber string) (*domain.Ticket, error) {
-	args := m.Called(vehicleNumber)
-	return args.Get(0).(*domain.Ticket), args.Error(1)
+func (m *MockAuthService) Login(username, password string) (string, error) {
+	args := m.Called(username, password)
+	return args.String(0), args.Error(1)
 }
 
-func (m *MockTicketRepo) SaveTicket(ticket domain.Ticket) error {
-	args := m.Called(ticket)
-	return args.Error(0)
-}
-
-func (m *MockTicketRepo) DeleteTicket(ticketID int64) error {
-	args := m.Called(ticketID)
-	return args.Error(0)
+func (m *MockAuthService) ValidateToken(tokenStr string) (*domain.Admin, error) {
+	args := m.Called(tokenStr)
+	return args.Get(0).(*domain.Admin), args.Error(1)
 }
 
 func TestParkVehicleRequest(t *testing.T) {
-	slotRepo := new(MockSlotRepo)
-	ticketRepo := new(MockTicketRepo)
-	service := parking.NewParkingService(slotRepo, ticketRepo)
-	handler := NewHandlers(service)
+	mockService := new(MockParkingService)
+	authService := new(MockAuthService)
+	handler := NewHandlers(mockService, authService)
 
-	vehicle := domain.Vehicle{VehicleNumber: "UP16AB1234", VehicleType: "car"}
-	slots := []domain.Slot{{SlotId: 1, SlotType: "car", IsFree: true}}
-	ticketRepo.On("FindTicketByVehicleNumber", vehicle.VehicleNumber).Return((*domain.Ticket)(nil), nil)
+	vehicle := domain.Vehicle{
+		VehicleNumber: "UP16AB1234",
+		VehicleType:   "car",
+	}
 
-	slotRepo.On("FindSlotByType", vehicle.VehicleType).Return(slots, nil)
-	slotRepo.On("UpdateSlot", &slots[0]).Return(nil)
-	ticketRepo.On("SaveTicket", mock.AnythingOfType("domain.Ticket")).Return(nil)
+	ticket := &domain.Ticket{
+		TicketId:      123456,
+		VehicleNumber: "UP16AB1234",
+		SlotId:        1,
+	}
+
+	mockService.On("ParkVehicle", vehicle).Return(ticket, nil)
 
 	body, _ := json.Marshal(vehicle)
-	req := httptest.NewRequest(http.MethodPost, "/park", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/ParkVehicleRequest", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	handler.ParkVehicleRequest(w, req)
 
-	res := w.Result()
-	defer res.Body.Close()
+	assert.Equal(t, http.StatusCreated, w.Code)
+	mockService.AssertExpectations(t)
+}
+func TestParkVehicleRequest_AlreadyParked(t *testing.T) {
+	mockService := new(MockParkingService)
+	authService := new(MockAuthService)
+	handler := NewHandlers(mockService, authService)
 
-	assert.Equal(t, http.StatusCreated, res.StatusCode)
+	vehicle := domain.Vehicle{
+		VehicleNumber: "UP16AB1234",
+		VehicleType:   "car",
+	}
+
+	mockService.On("ParkVehicle", vehicle).Return((*domain.Ticket)(nil), errors.New("vehicle already parked"))
+
+	body, _ := json.Marshal(vehicle)
+	req := httptest.NewRequest(http.MethodPost, "/ParkVehicleRequest", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.ParkVehicleRequest(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Body.String(), "vehicle already parked")
+}
+func TestParkVehicleRequest_InvalidJSON(t *testing.T) {
+	mockService := new(MockParkingService)
+	authService := new(MockAuthService)
+	handler := NewHandlers(mockService, authService)
+
+	req := httptest.NewRequest(http.MethodPost, "/ParkVehicleRequest", bytes.NewReader([]byte("invalid-json")))
+	w := httptest.NewRecorder()
+
+	handler.ParkVehicleRequest(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "Invalid Body Request")
 }
 
 func TestUnparkVehicleRequest(t *testing.T) {
-	slotRepo := new(MockSlotRepo)
-	ticketRepo := new(MockTicketRepo)
-	service := parking.NewParkingService(slotRepo, ticketRepo)
-	handler := NewHandlers(service)
+	mockService := new(MockParkingService)
+	authService := new(MockAuthService)
+	handler := NewHandlers(mockService, authService)
 
-	ticket := &domain.Ticket{TicketId: 101, VehicleNumber: "UP16AB1234", SlotId: 1, EntryTime: time.Now().Add(-1 * time.Hour)}
-	slot := &domain.Slot{SlotId: 1, SlotType: "car", IsFree: false}
+	vehicleNumber := "UP16AB1234"
+	expectedFee := 120.0
 
-	ticketRepo.On("FindTicketByVehicleNumber", ticket.VehicleNumber).Return(ticket, nil)
-	slotRepo.On("FindSlotByID", ticket.SlotId).Return(slot, nil)
-	slotRepo.On("FindSlotTypebyID", ticket.SlotId).Return("car", nil)
-	slotRepo.On("UpdateSlot", mock.Anything).Return(nil)
-	ticketRepo.On("DeleteTicket", ticket.TicketId).Return(nil)
+	mockService.On("UnparkVehicle", vehicleNumber).Return(expectedFee, nil)
 
-	body := []byte(`{"vehiclenumber":"UP16AB1234"}`)
+	body, _ := json.Marshal(map[string]string{
+		"vehiclenumber": vehicleNumber,
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/UnparkVehicleRequest", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.UnparkVehicleRequest(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+
+	assert.Equal(t, vehicleNumber, response["vehiclenumber"])
+	assert.Equal(t, 120.0, response["fee"])
+	assert.Equal(t, "Successfully Unpark The Vehicle", response["message"])
+
+	mockService.AssertExpectations(t)
+}
+func TestUnparkVehicleRequest_InvalidJSON(t *testing.T) {
+	mockService := new(MockParkingService)
+	authService := new(MockAuthService)
+	handler := NewHandlers(mockService, authService)
+
+	req := httptest.NewRequest(http.MethodPost, "/UnparkVehicleRequest", bytes.NewReader([]byte("invalid-json")))
+	w := httptest.NewRecorder()
+
+	handler.UnparkVehicleRequest(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "Invalid Body Request")
+}
+
+func TestAddSlot(t *testing.T) {
+	mockService := new(MockParkingService)
+	authService := new(MockAuthService)
+	handler := NewHandlers(mockService, authService)
+
+	slot := domain.Slot{
+		SlotId:   1,
+		SlotType: "car",
+		IsFree:   true,
+	}
+
+	mockService.On("AddSlot", slot).Return(nil)
+
+	body, _ := json.Marshal(slot)
+	req := httptest.NewRequest(http.MethodPost, "/AddSlot", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.AddSlot(w, req)
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	assert.Equal(t, "Slot added successfully", w.Body.String())
+
+	mockService.AssertExpectations(t)
+}
+func TestUnparkVehicleRequest_TicketNotFound(t *testing.T) {
+	mockService := new(MockParkingService)
+	authService := new(MockAuthService)
+
+	handler := NewHandlers(mockService, authService)
+
+	vehicleNumber := "UP16AB1234"
+
+	mockService.On("UnparkVehicle", vehicleNumber).Return(0.0, errors.New("ticket not found"))
+
+	body, _ := json.Marshal(map[string]string{
+		"vehiclenumber": vehicleNumber,
+	})
 	req := httptest.NewRequest(http.MethodPost, "/unpark", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	handler.UnparkVehicleRequest(w, req)
-	res := w.Result()
-	assert.Equal(t, http.StatusOK, res.StatusCode)
-}
 
-func TestAddSlot(t *testing.T) {
-	slotRepo := new(MockSlotRepo)
-	ticketRepo := new(MockTicketRepo)
-	service := parking.NewParkingService(slotRepo, ticketRepo)
-	handler := NewHandlers(service)
-
-	slot := domain.Slot{SlotId: 1, SlotType: "car", IsFree: true}
-	slotRepo.On("SaveSlot", slot).Return(nil)
-
-	body, _ := json.Marshal(slot)
-	req := httptest.NewRequest(http.MethodPost, "/add-slot", bytes.NewReader(body))
-	w := httptest.NewRecorder()
-
-	handler.AddSlot(w, req)
-	res := w.Result()
-	assert.Equal(t, http.StatusCreated, res.StatusCode)
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "ticket not found")
 }
 
 func TestGetAvailableSlots(t *testing.T) {
-	slotRepo := new(MockSlotRepo)
-	ticketRepo := new(MockTicketRepo)
-	service := parking.NewParkingService(slotRepo, ticketRepo)
-	handler := NewHandlers(service)
+	mockService := new(MockParkingService)
+	authService := new(MockAuthService)
 
-	slots := []domain.Slot{{SlotId: 1, SlotType: "car", IsFree: true}}
-	slotRepo.On("ListAvailableSlots").Return(slots, nil)
+	handler := NewHandlers(mockService, authService)
+
+	slots := []domain.Slot{
+		{SlotId: 1, SlotType: "car", IsFree: true},
+		{SlotId: 2, SlotType: "bike", IsFree: true},
+	}
+
+	mockService.On("GetAvailableSlots").Return(slots, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/available-slots", nil)
 	w := httptest.NewRecorder()
 
 	handler.GetAvailableSlots(w, req)
-	res := w.Result()
-	assert.Equal(t, http.StatusOK, res.StatusCode)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response []domain.Slot
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, slots, response)
+
+	mockService.AssertExpectations(t)
+}
+
+func TestLoginHandler(t *testing.T) {
+	mockService := new(MockParkingService)
+	authService := new(MockAuthService)
+
+	handler := NewHandlers(mockService, authService)
+
+	creds := map[string]string{
+		"username": "admin",
+		"password": "admin123",
+	}
+	expectedToken := "mocked.jwt.token"
+
+	authService.On("Login", creds["username"], creds["password"]).Return(expectedToken, nil)
+
+	body, _ := json.Marshal(creds)
+	req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	handler.LoginHandler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]string
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+
+	assert.Equal(t, expectedToken, response["token"])
+	assert.Equal(t, "Login successful", response["message"])
+
+	authService.AssertExpectations(t)
 }

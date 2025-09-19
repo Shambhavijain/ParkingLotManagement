@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+type ParkingInterface interface {
+	ParkVehicle(vehicle domain.Vehicle) (*domain.Ticket, error)
+	UnparkVehicle(VehicleNumber string) (float64, error)
+	AddSlot(slot domain.Slot) error
+	GetAvailableSlots() ([]domain.Slot, error)
+}
 type ParkingService struct {
 	SlotRepo   ports.SlotRepository
 	TicketRepo ports.TicketRepository

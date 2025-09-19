@@ -11,6 +11,10 @@ import (
 	"github.com/golang-jwt/jwt"
 )
 
+type AuthInterface interface {
+	Login(username, password string) (string, error)
+	ValidateToken(tokenStr string) (*domain.Admin, error)
+}
 type AuthService struct {
 	repo      ports.UserRepository
 	secretKey string

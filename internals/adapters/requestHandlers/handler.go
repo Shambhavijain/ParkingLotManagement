@@ -11,13 +11,14 @@ import (
 )
 
 type Handlers struct {
-	service     *parking.ParkingService
-	authService *auth.AuthService
+	service     parking.ParkingInterface
+	authService auth.AuthInterface
 }
 
-func NewHandlers(service *parking.ParkingService) *Handlers {
+func NewHandlers(service parking.ParkingInterface, authService auth.AuthInterface) *Handlers {
 	return &Handlers{
-		service: service,
+		service:     service,
+		authService: authService,
 	}
 }
 func (h *Handlers) ParkVehicleRequest(w http.ResponseWriter, r *http.Request) {

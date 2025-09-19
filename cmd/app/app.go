@@ -28,7 +28,7 @@ func Start() {
 	parkingService := parking.NewParkingService(slotRepo, ticketRepo)
 	authService := auth.NewAuthService(userRepo)
 
-	handler := requestHandlers.NewHandlers(parkingService)
+	handler := requestHandlers.NewHandlers(parkingService, authService)
 
 	r := mux.NewRouter()
 
