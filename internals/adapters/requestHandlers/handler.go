@@ -2,7 +2,7 @@ package requestHandlers
 
 import (
 	"encoding/json"
-	"fmt"
+
 	"math"
 	"net/http"
 	"parkingSlotManagement/internals/core/domain"
@@ -27,7 +27,7 @@ func (h *Handlers) ParkVehicleRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid Body Request", http.StatusInternalServerError)
 		return
 	}
-	fmt.Println(vehicle)
+
 	ticket, err := h.service.ParkVehicle(vehicle)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
